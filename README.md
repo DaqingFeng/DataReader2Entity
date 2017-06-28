@@ -6,7 +6,12 @@ C# IDataReader to Entity . Support  multiple thread .Nullable property convert.
  
 ## Usage
 
-      var result = baseDao.ExecuteReader(connectionString,cmdType,cmdText,commandParameters){
-          IList<BillCategoryQueryResponse> lst = DataReaderConverter.Fill<BillCategoryQueryResponse>(sdr);
-          return lst;
-      });
+ ```c#
+  
+       var sdr = baseDao.ExecuteReader(connectionString,cmdType,cmdText,commandParameters){
+       IList<BillCategoryQueryResponse> lst = DataReaderConverter.Fill<BillCategoryQueryResponse>(sdr);
+       
+        var sdrtwo = baseDao.ExecuteReader(connectionString,cmdType,cmdTextByPrimaryKey,commandParameters){
+        BillCategoryQueryResponse  entity = DataReaderConverter.FillSingle<BillCategoryQueryResponse>(sdrtwo);
+        
+ ```
