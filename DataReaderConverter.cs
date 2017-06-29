@@ -24,7 +24,6 @@ namespace Infrastructure.Common
         {
             int filedcount = dataReader.FieldCount;
             if (filedcount == 0) throw new ArgumentNullException("None of filed be queried");
-            var result = new BlockingCollection<TEntity>();
             //a list of dictionaries for each row
             var rows = new List<IDictionary<string, object>>();
             while (dataReader.Read())
@@ -33,16 +32,18 @@ namespace Infrastructure.Common
             }
             //close the dataReader
             dataReader.Close();
+            if (rows.Count == 0)
+            {
+                return default(IList<TEntity>);
+            }
+            IList<TEntity> result = new List<TEntity>();
             //use the list of dictionaries
-            Parallel.ForEach(rows, row =>
+            foreach (var row in rows)
             {
                 var entity = BuildEntity<TEntity>(row);
-                if (entity != null)
-                {
-                    result.TryAdd(entity);
-                }
-            });
-            return result.ToList();
+                result.Add(entity);
+            }
+            return result;
         }
 
         /// <summary>
@@ -61,6 +62,10 @@ namespace Infrastructure.Common
             }
             //close the dataReader
             dataReader.Close();
+            if (row.Count == 0)
+            {
+                return default(TEntity);
+            }
             //use the list of dictionaries
             return BuildEntity<TEntity>(row);
         }
@@ -118,10 +123,6 @@ namespace Infrastructure.Common
 
         private static TEntity BuildEntity<TEntity>(IDictionary<string, object> row) where TEntity : new()
         {
-            if (row.Count == 0)
-            {
-                return default(TEntity);
-            }
             var entity = new TEntity();
             var type = typeof(TEntity);
             foreach (var item in row)
@@ -217,7 +218,6 @@ namespace Infrastructure.Common
         {
             if (dataReader.FieldCount == 0) throw new ArgumentNullException("None of filed be queried");
             var result = new BlockingCollection<string>();
-
             while (dataReader.Read())
             {
                 result.TryAdd(dataReader.GetValue(0).ToString());
