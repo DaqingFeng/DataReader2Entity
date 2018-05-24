@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
@@ -36,6 +36,7 @@ namespace Infrastructure.Common
             {
                 return default(IList<TEntity>);
             }
+            //use the list of dictionaries
             IList<TEntity> result = new List<TEntity>();
             //use the list of dictionaries
             foreach (var row in rows)
@@ -43,7 +44,37 @@ namespace Infrastructure.Common
                 var entity = BuildEntity<TEntity>(row);
                 result.Add(entity);
             }
-            return result;
+            return result.ToList();
+        }
+
+        /// <summary>
+        /// Reads data reader into a list of entities
+        /// </summary>
+        /// <param name="dataReader">The data reader.</param>
+        /// <returns>A list of the specified entities</returns>
+        public static IList<TEntity> FillNoneClose<TEntity>(IDataReader dataReader) where TEntity : new() //must have public parameterless constructor
+        {
+            int filedcount = dataReader.FieldCount;
+            if (filedcount == 0) throw new ArgumentNullException("None of filed be queried");
+            //a list of dictionaries for each row
+            var rows = new List<IDictionary<string, object>>();
+            while (dataReader.Read())
+            {
+                rows.Add(ReadRow(dataReader, 0, filedcount));
+            }
+            if (rows.Count == 0)
+            {
+                return default(IList<TEntity>);
+            }
+            //use the list of dictionaries
+            IList<TEntity> result = new List<TEntity>();
+            //use the list of dictionaries
+            foreach (var row in rows)
+            {
+                var entity = BuildEntity<TEntity>(row);
+                result.Add(entity);
+            }
+            return result.ToList();
         }
 
         /// <summary>
@@ -62,14 +93,28 @@ namespace Infrastructure.Common
             }
             //close the dataReader
             dataReader.Close();
-            if (row.Count == 0)
-            {
-                return default(TEntity);
-            }
             //use the list of dictionaries
             return BuildEntity<TEntity>(row);
         }
 
+
+        /// <summary>
+        /// Reads data reader into a list of entities
+        /// </summary>
+        /// <param name="dataReader">The data reader.</param>
+        /// <returns>A list of the specified entities</returns>
+        public static TEntity FillSingleNoneClose<TEntity>(IDataReader dataReader) where TEntity : new() //must have public parameterless constructor
+        {
+            int filedcount = dataReader.FieldCount;
+            if (filedcount == 0) throw new ArgumentNullException("None of filed be queried");
+            ConcurrentDictionary<string, object> row = new ConcurrentDictionary<string, object>();
+            if (dataReader.Read())
+            {
+                row = ReadRow(dataReader, 0, filedcount);
+            }
+            //use the list of dictionaries
+            return BuildEntity<TEntity>(row);
+        }
 
         /// <summary>
         /// Reads data reader into a list of entities
@@ -111,6 +156,46 @@ namespace Infrastructure.Common
             return result;
         }
 
+
+
+        /// <summary>
+        /// Reads data reader into a list of entities
+        /// </summary>
+        /// <param name="dataReader">The data reader.</param>
+        /// <returns>A list of the specified entities</returns>
+        public static IList<TEntity> FillNoneClose<TEntity, TEntityDetail>(IDataReader dataReader, string SplitOn, Func<TEntity, TEntityDetail, TEntity> Func) where TEntity : new()
+            where TEntityDetail : new()//must have public parameterless constructor
+        {
+            int filedcount = dataReader.FieldCount;
+            if (filedcount == 0) throw new ArgumentNullException("None of filed be queried");
+            var result = new List<TEntity>();
+            //a list of dictionaries for each row
+            int startBound = dataReader.FieldCount;
+
+            if (SplitOn != null)
+            {
+                for (int i = 0; i < dataReader.FieldCount; i++)
+                {
+                    if (dataReader.GetName(i).Equals(SplitOn) && i > 0)
+                    {
+                        startBound = i;
+                        break;
+                    }
+                }
+            }
+
+            while (dataReader.Read())
+            {
+                var dr = ReadRow(dataReader, 0, startBound);
+                var entity = BuildEntity<TEntity>(dr);
+
+                var drdetail = ReadRow(dataReader, startBound, filedcount);
+                var entitydetail = BuildEntity<TEntityDetail>(drdetail);
+                Func(entity, entitydetail);
+            }
+            return result;
+        }
+
         private static ConcurrentDictionary<string, object> ReadRow(IDataRecord record, int startbound = 0, int length = 0)
         {
             var row = new ConcurrentDictionary<string, object>();
@@ -123,6 +208,10 @@ namespace Infrastructure.Common
 
         private static TEntity BuildEntity<TEntity>(IDictionary<string, object> row) where TEntity : new()
         {
+            if (row.Count == 0)
+            {
+                return default(TEntity);
+            }
             var entity = new TEntity();
             var type = typeof(TEntity);
             foreach (var item in row)
@@ -210,20 +299,54 @@ namespace Infrastructure.Common
 
         #region basic data type
         /// <summary>
-        /// 获取string集合
+        /// 获取单列常量集合
         /// </summary>
         /// <param name="dataReader"></param>
         /// <returns></returns>
-        public static IList<string> Fill(IDataReader dataReader)
+        public static IList<T> FillConstantList<T>(IDataReader dataReader)
         {
             if (dataReader.FieldCount == 0) throw new ArgumentNullException("None of filed be queried");
-            var result = new BlockingCollection<string>();
+            var result = new BlockingCollection<T>();
             while (dataReader.Read())
             {
-                result.TryAdd(dataReader.GetValue(0).ToString());
+                result.TryAdd((T)Convert.ChangeType(dataReader.GetValue(0), GetNullAbleProperty(typeof(T))));
             }
             dataReader.Close();
             return result.ToList();
+        }
+
+        /// <summary>
+        /// 获取常量
+        /// </summary>
+        /// <param name="dataReader"></param>
+        /// <returns></returns>
+        public static T FillConstant<T>(IDataReader dataReader)
+        {
+            T result = default(T);
+            if (dataReader.FieldCount == 0) throw new ArgumentNullException("None of filed be queried");
+            while (dataReader.Read())
+            {
+                result = (T)Convert.ChangeType(dataReader.GetValue(0), GetNullAbleProperty(typeof(T)));
+            }
+            dataReader.Close();
+            return result;
+        }
+
+
+        /// <summary>
+        /// 获取常量
+        /// </summary>
+        /// <param name="dataReader"></param>
+        /// <returns></returns>
+        public static T FillConstantNoneClose<T>(IDataReader dataReader)
+        {
+            T result = default(T);
+            if (dataReader.FieldCount == 0) throw new ArgumentNullException("None of filed be queried");
+            while (dataReader.Read())
+            {
+                result = (T)Convert.ChangeType(dataReader.GetValue(0), GetNullAbleProperty(typeof(T)));
+            }
+            return result;
         }
         #endregion
     }
